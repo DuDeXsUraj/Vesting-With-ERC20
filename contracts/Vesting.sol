@@ -7,52 +7,62 @@ import "./Token.sol";
 
 contract Vesting is Ownable {
     IERC20 public token;
-    address public receiver;
     uint256 public startTimestamp;
     uint256 public duration; // In seconds
     uint256 public n;
-    uint256 public totalAmount;
+    uint256 public totalDeposited;
     uint256 public claimedAmount;
+    uint256 public amount;
+
+    event Deposited(address indexed account, uint256 amount);
+    event Claimed(address indexed account, uint256 amount);
+
+    mapping(address => uint256) public deposits; // Mapping to store deposited amounts for each receiver
 
     constructor(
         address _token,
-        address _receiver,
         uint256 _durationInDays,
-        uint256 _n,
-        uint256 _totalAmount
+        uint256 _n
     ) {
         token = IERC20(_token);
-        receiver = _receiver;
-        duration = _durationInDays ;
+        duration = _durationInDays; // Convert days to seconds
         n = _n;
-        totalAmount = _totalAmount;
         startTimestamp = block.timestamp;
     }
 
-    function claimableAmount() public view returns (uint256) {
-        require(block.timestamp >= startTimestamp, "Vesting has not started yet");
-        
-        uint256 timeElapsed = block.timestamp - startTimestamp;
-        uint256 numPeriods = timeElapsed / duration;
+    function deposit(uint256) external {
+        require(amount > 0, "Invalid deposit amount");
+        require(token.transferFrom(msg.sender, address(this), amount), "Token transfer failed");
 
-        if (numPeriods >= n) {
-            return totalAmount - claimedAmount;
-        }
-
-        uint256 tokensPerPeriod = totalAmount / n;
-        uint256 claimable = tokensPerPeriod * (numPeriods + 1);
-        if (claimable > totalAmount) {
-            claimable = totalAmount;
-        }
-
-        return claimable - claimedAmount;
+        totalDeposited += amount;
+        deposits[msg.sender] += amount;
+        emit Deposited(msg.sender, amount);
     }
 
-    function withdraw() public onlyOwner {
-        uint256 amountToClaim = claimableAmount();
+    function claimableAmount(address receiverAddress) public view returns (uint256) {
+        require(block.timestamp >= startTimestamp || deposits[receiverAddress] == 0 ,"Vesting has not started");
+        uint256 timeElapsed = block.timestamp - startTimestamp;
+        uint256 numPeriods = timeElapsed  / duration;
+
+        if (numPeriods >= n) {
+            return deposits[receiverAddress];
+        }
+
+        uint256 tokensPerPeriod = amount / n;
+        uint256 claimable = tokensPerPeriod * (numPeriods + 1);
+        if (claimable > totalDeposited) {
+            claimable = totalDeposited;
+        }
+
+        return claimable;
+    }
+
+    function withdraw() external {
+        uint256 amountToClaim = claimableAmount(msg.sender);
         require(amountToClaim > 0, "No tokens to claim");
 
-        claimedAmount += amountToClaim;
-        token.transfer(receiver, amountToClaim);
+        require(token.transfer(msg.sender, amountToClaim), "Token transfer failed");
+
+        emit Claimed(msg.sender, amountToClaim);
     }
 }
