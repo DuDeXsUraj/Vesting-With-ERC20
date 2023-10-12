@@ -7,7 +7,7 @@ describe("Vesting Contract", function () {
 
   const DURATION = 86400; // 1 day in seconds
   const N = 10;
-  const AMOUNT = 1000; // Initial deposit amount
+  const AMOUNT = 100 ; // Initial deposit amount
 
   beforeEach(async function () {
     [owner, user] = await ethers.getSigners();

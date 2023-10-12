@@ -12,13 +12,13 @@ contract Vesting is Ownable {
     uint256 public n;
     uint256 public totalDeposited;
     uint256 public amount;
+    uint256 public decimals = 10**18; // New state variable
 
     event Deposited(address indexed account, uint256 amount);
     event Claimed(address indexed account, uint256 amount);
 
-    mapping(address => uint256) public deposits; // Mapping to store deposited amounts for each receiver
-  mapping(address => uint256) public claimedAmount; // Mapping to store claimed amounts for each receiver
-
+    mapping(address => uint256) public deposits;
+    mapping(address => uint256) public claimedAmount;
 
     constructor(
         address _token,
@@ -31,26 +31,28 @@ contract Vesting is Ownable {
         startTimestamp = block.timestamp;
     }
 
-    function deposit(uint256) external {
-        require(amount > 0, "Invalid deposit amount");
-        require(token.transferFrom(msg.sender, address(this), amount), "Token transfer failed");
+    function deposit(uint256 _amount) external {
+    require(_amount > 0, "Invalid deposit amount");
+    require(token.transferFrom(msg.sender, address(this), _amount), "Token transfer failed");
 
-        totalDeposited += amount;
-        deposits[msg.sender] += amount;
-        emit Deposited(msg.sender, amount);
-    }
+    totalDeposited += _amount;
+    deposits[msg.sender] += _amount;
+    amount = _amount; // Set the amount state variable
+    emit Deposited(msg.sender, _amount);
+}
+
 
     function claimableAmount(address receiverAddress) public view returns(uint256) {
-        require(block.timestamp >= startTimestamp || deposits[receiverAddress] == 0 ,"vesting not started");
+        require(block.timestamp >= startTimestamp || deposits[receiverAddress] == 0, "Vesting not started");
         uint256 timeElapsed = block.timestamp - startTimestamp;
-        uint256 numPeriods = timeElapsed  / duration;
+        uint256 numPeriods = timeElapsed / duration;
 
         if (numPeriods >= n) {
             return deposits[receiverAddress];
         }
 
-        uint256 tokensPerPeriod = amount / n;
-        uint256 claimable = tokensPerPeriod * (numPeriods + 1);
+        uint256 tokensPerPeriod = (amount * decimals) / n; // Adjusted calculation with decimals
+        uint256 claimable = (tokensPerPeriod * (numPeriods + 1)) / decimals; // Adjusted calculation with decimals
         return claimable;
     }
 
@@ -59,7 +61,7 @@ contract Vesting is Ownable {
         require(amountToClaim > 0, "No tokens to claim");
        
         require(token.transfer(msg.sender, amountToClaim), "Token transfer failed");
-             claimedAmount[msg.sender] += amountToClaim;
+        claimedAmount[msg.sender] += amountToClaim;
         emit Claimed(msg.sender, amountToClaim);
     }
 }
