@@ -1,45 +1,78 @@
 const { expect } = require("chai");
-const { ethers } = require("hardhat");
 
-describe("Vesting Contract", function () {
-  let Token, Vesting;
-  let token, vesting, owner, user;
-
-  const DURATION = 86400; // 1 day in seconds
-  const N = 10;
-  const AMOUNT = 100 ; // Initial deposit amount
+describe("vesting Contract", function () {
+  let Vesting;
+  let vesting;
+  let Token;
+  let token;
+  let owner;
+  let receiver;
 
   beforeEach(async function () {
-    [owner, user] = await ethers.getSigners();
+    [owner, receiver] = await ethers.getSigners();
 
     Token = await ethers.getContractFactory("Token");
+    token = await Token.deploy(1000000);
+
     Vesting = await ethers.getContractFactory("Vesting");
-
-    token = await Token.deploy(AMOUNT);
-    await token.deployed();
-
-    vesting = await Vesting.deploy(token.address, DURATION, N);
-    await vesting.deployed();
+    vesting = await Vesting.deploy(token.address, 30, 4, receiver.address);
   });
 
-  it("Should allow users to deposit tokens", async function () {
-    await token.connect(user).approve(vesting.address, AMOUNT);
-    await vesting.connect(user).deposit(AMOUNT);
-
-    const userDeposits = await vesting.deposits(user.address);
-    expect(userDeposits).to.equal(AMOUNT);
+  it("Should deposit tokens", async function () {
+    const depositAmount = ethers.utils.parseEther("100");
+    await token.connect(owner).approve(vesting.address, depositAmount);
+    await vesting.connect(owner).deposit(depositAmount);
+    const receiverBalance = await token.balanceOf(vesting.address);
+    expect(receiverBalance).to.equal(depositAmount);
   });
 
-  it("Should allow users to claim tokens after vesting period", async function () {
-    // Fast-forward time by 10 days
-    await ethers.provider.send("evm_increaseTime", [DURATION * N]);
-    await ethers.provider.send("evm_mine");
+  it("Should not allow non-receiver to withdraw", async function () {
+    const depositAmount = ethers.utils.parseEther("100");
+    await token.connect(owner).approve(vesting.address, depositAmount);
+    await vesting.connect(owner).deposit(depositAmount);
 
-    const initialUserBalance = await token.balanceOf(user.address);
-    await vesting.connect(user).withdraw();
-    const finalUserBalance = await token.balanceOf(user.address);
+    await expect(vesting.connect(owner).withdraw()).to.be.revertedWith("Only receiver can withdraw");
+  });
 
-    const claimedAmount = await vesting.claimedAmount(user.address);
-    expect(finalUserBalance.sub(initialUserBalance)).to.equal(claimedAmount);
+  it("Should calculate claimable amount correctly", async function () {
+    const depositAmount = ethers.utils.parseEther("100");
+    await token.connect(owner).approve(vesting.address, depositAmount);
+    await vesting.connect(owner).deposit(depositAmount);
+
+    // Fast-forward 40 days
+    await network.provider.send("evm_increaseTime", [40 * 24 * 60 * 60]);
+    await network.provider.send("evm_mine");
+
+    const claimableAmount = await vesting.connect(receiver).claimableAmount(receiver.address);
+    expect(claimableAmount).to.equal(depositAmount);
+  });
+
+  it("Should allow receiver to withdraw claimable amount", async function () {
+    const depositAmount = ethers.utils.parseEther("100");
+    await token.connect(owner).approve(vesting.address, depositAmount);
+    await vesting.connect(owner).deposit(depositAmount);
+
+    // Fast-forward 40 days
+    await network.provider.send("evm_increaseTime", [40 * 24 * 60 * 60]);
+    await network.provider.send("evm_mine");
+
+    await vesting.connect(receiver).withdraw();
+    const receiverBalance = await token.balanceOf(receiver.address);
+    expect(receiverBalance).to.equal(depositAmount);
+  });
+
+  it("Should not allow double withdrawal", async function () {
+    const depositAmount = ethers.utils.parseEther("100");
+    await token.connect(owner).approve(vesting.address, depositAmount);
+    await vesting.connect(owner).deposit(depositAmount);
+
+    // Fast-forward 40 days
+    await network.provider.send("evm_increaseTime", [40 * 24 * 60 * 60]);
+    await network.provider.send("evm_mine");
+
+    await vesting.connect(receiver).withdraw();
+
+    // Try to withdraw again
+    await expect(vesting.connect(receiver).withdraw()).to.be.revertedWith("No tokens to claim");
   });
 });
