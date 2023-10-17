@@ -51,7 +51,7 @@ contract Vesting is Ownable (){
     }
 
     function claimableAmount(address receiverAddress) public view returns(uint256) {
-        require(block.timestamp >= startTimestamp || deposits[receiverAddress] == 0, "Vesting not started");
+        require(startTimestamp > block.timestamp || deposits[receiverAddress] == 0, "Vesting not started");
         uint256 timeElapsed = block.timestamp - startTimestamp;
         uint256 numPeriods = timeElapsed / duration;
 
