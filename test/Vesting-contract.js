@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 
-describe("vesting Contract", function () {
+describe("Vesting Contract", function () {
   let Vesting;
   let vesting;
   let Token;
